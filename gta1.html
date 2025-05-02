@@ -1,0 +1,912 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vice Drive Concept v6.1 - No Police</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Inter:wght@400;700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <style>
+        body {
+            /* Vice City inspired gradient background */
+            background: linear-gradient(to bottom, #ff7e5f, #feb47b, #ffcc80);
+            font-family: 'Inter', sans-serif; /* Cleaner font for UI */
+            color: #ffffff;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 1rem;
+            overflow: hidden;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.5); /* Subtle text shadow */
+        }
+        canvas {
+            background-color: #4a4a4a; /* Darker asphalt color */
+            border: 4px solid #1a1a1a; /* Dark border */
+            display: block;
+            max-width: 100%;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+            border-radius: 8px;
+            cursor: pointer; /* Indicate canvas is interactive for sound start */
+            position: relative; /* Needed for absolute positioning of UI elements */
+        }
+        .game-container {
+             position: relative; /* Container for canvas and overlay UI */
+             width: fit-content; /* Fit to canvas size */
+             margin-bottom: 1rem;
+        }
+        .game-ui-overlay {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            left: 10px; /* Span across top */
+            display: flex;
+            justify-content: space-between; /* Space out score and wanted */
+            align-items: flex-start; /* Align items to the top */
+            pointer-events: none; /* Allow clicks to pass through to canvas */
+            z-index: 5; /* Above canvas content */
+        }
+        #score {
+            font-family: 'Press Start 2P', cursive; /* Retro font for score */
+            color: #00ff00; /* Green score text */
+            font-size: 1rem;
+            background-color: rgba(0,0,0,0.5);
+            padding: 5px 10px;
+            border-radius: 4px;
+        }
+        #wantedLevel {
+            font-family: 'Press Start 2P', cursive; /* Retro font for stars */
+            color: #ffcc00; /* Yellow wanted level stars */
+            letter-spacing: 0.2em; /* Space out stars more */
+            font-size: 1.2rem; /* Larger stars */
+            background-color: rgba(0,0,0,0.5);
+            padding: 5px 10px;
+            border-radius: 4px;
+        }
+        .game-title {
+             text-align: center;
+             width: 100%;
+             max-width: 600px;
+             margin-bottom: 1rem;
+             font-size: 2rem; /* Larger title */
+             font-family: 'Press Start 2P', cursive; /* Retro font for title */
+             color: #f8f8f8; /* Bright white */
+             text-shadow: 2px 2px 4px rgba(0,0,0,0.7);
+        }
+        .controls {
+            margin-top: 1.5rem;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 0.75rem;
+            width: 200px;
+            justify-items: center;
+        }
+        .controls button {
+            font-family: 'Press Start 2P', cursive;
+            background: linear-gradient(to bottom, #6a6a6a, #4a4a4a); /* Subtle gradient */
+            color: #ffffff;
+            border: 2px solid #ffffff;
+            padding: 0.75rem 1rem;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background 0.2s ease, transform 0.1s ease;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.4);
+            user-select: none;
+            text-shadow: none; /* Remove body shadow from buttons */
+        }
+        .controls button:active {
+            background: linear-gradient(to bottom, #5a5a5a, #3a3a3a);
+            transform: translateY(2px);
+            box-shadow: 0 2px 3px rgba(0, 0, 0, 0.4);
+        }
+        /* Control button labels and placement */
+        .up { grid-column: 2 / 3; } /* Forward */
+        .left { grid-column: 1 / 2; grid-row: 2 / 3; } /* Rotate Left */
+        .down { grid-column: 2 / 3; grid-row: 2 / 3; } /* Backward/Brake */
+        .right { grid-column: 3 / 4; grid-row: 2 / 3; } /* Rotate Right */
+        .placeholder { grid-column: 1 / 2; grid-row: 1 / 2; visibility: hidden; }
+        .placeholder2 { grid-column: 3 / 4; grid-row: 1 / 2; visibility: hidden; }
+        .instructions {
+            margin-top: 1rem;
+            font-size: 0.8rem;
+            color: #1a1a1a; /* Darker text for contrast on light bg */
+            text-align: center;
+            max-width: 600px; /* Match canvas width */
+            text-shadow: none; /* Remove body shadow */
+        }
+         /* Style for sound initialization message */
+         #soundMessage {
+             position: absolute;
+             top: 50%;
+             left: 50%;
+             transform: translate(-50%, -50%);
+             background-color: rgba(0,0,0,0.8);
+             color: white;
+             padding: 1rem 2rem;
+             border-radius: 8px;
+             font-size: 1rem;
+             z-index: 10; /* Ensure it's above the canvas */
+             text-align: center;
+             display: none; /* Hidden by default */
+             font-family: 'Inter', sans-serif;
+             text-shadow: none;
+         }
+         /* Style for Minimap */
+         #minimapContainer {
+             position: absolute;
+             bottom: 10px;
+             left: 10px;
+             width: 100px; /* Adjust size as needed */
+             height: 80px; /* Adjust size as needed */
+             background-color: rgba(0, 0, 0, 0.6);
+             border: 2px solid rgba(255, 255, 255, 0.5);
+             border-radius: 4px;
+             z-index: 5;
+             pointer-events: none; /* Allow clicks to pass through */
+         }
+         #minimapPlayer {
+             position: absolute;
+             width: 5px;
+             height: 5px;
+             background-color: #ffcc00; /* Player color */
+             border-radius: 50%;
+             transform: translate(-50%, -50%); /* Center the dot */
+         }
+    </style>
+</head>
+<body>
+
+    <h1 class="game-title">Vice Drive</h1>
+
+    <div class="game-container">
+        <div class="game-ui-overlay">
+             <span id="score">Score: 0</span>
+             <span id="wantedLevel"></span>
+        </div>
+        <canvas id="gameCanvas"></canvas>
+        <div id="soundMessage">Click screen to enable sound</div>
+        <div id="minimapContainer">
+            <div id="minimapPlayer"></div>
+            </div>
+    </div>
+
+
+    <div class="controls">
+        <div class="placeholder"></div>
+        <button id="btnUp" class="up">▲</button> <div class="placeholder2"></div>
+        <button id="btnLeft" class="left">◀</button> <button id="btnDown" class="down">▼</button> <button id="btnRight" class="right">▶</button>
+    </div>
+
+    <p class="instructions">Use Arrow Keys or Buttons. Collect Green Dots! Avoid Buildings. Destroy cars & hit peds for Wanted Level!</p>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreElement = document.getElementById('score');
+        const wantedLevelElement = document.getElementById('wantedLevel');
+        const soundMessage = document.getElementById('soundMessage');
+        const minimapContainer = document.getElementById('minimapContainer');
+        const minimapPlayer = document.getElementById('minimapPlayer');
+
+        // --- Game Settings ---
+        const carWidth = 20;
+        const carHeight = 35; // Slightly longer car
+        const playerCarColor = '#ffffff'; // White player car
+        const carMoveSpeed = 3.0; // Slightly faster
+        const carReverseSpeed = 1.8;
+        const carTurnRate = 0.055; // Slightly faster turning
+        const buildingColors = ['#ffab91', '#ffcc80', '#e6ee9b', '#80deea', '#cf94da', '#f48fb1']; // Pastel building colors
+        const collectibleColor = '#00ff00';
+        const collectibleRadius = 8;
+        const numCollectibles = 10;
+        const numTrafficCars = 5; // More traffic
+        const trafficCarColors = ['#e57373', '#fff176', '#81c784', '#64b5f6', '#9575cd']; // Various traffic colors
+        const trafficCarSpeedMin = 1.0;
+        const trafficCarSpeedMax = 1.8;
+        const numPedestrians = 10; // More pedestrians
+        const pedestrianColor = '#212121'; // Darker pedestrians
+        const pedestrianWidth = 8;
+        const pedestrianHeight = 12;
+        const pedestrianSpeedMin = 0.4;
+        const pedestrianSpeedMax = 0.8;
+        const pedestrianTurnChance = 0.02;
+        const explosionDuration = 15;
+        const maxWantedLevel = 5;
+        const wantedStar = '★';
+        const wantedLevelIncreaseCar = 1;
+        const wantedLevelIncreasePed = 1;
+        // REMOVED: Police car constants
+
+        // --- Game State ---
+        let score = 0;
+        let wantedLevel = 0;
+        const car = {
+            x: 0, y: 0, width: carWidth, height: carHeight,
+            angle: -Math.PI / 2, speed: 0, color: playerCarColor,
+            accelerating: false, braking: false, turningLeft: false, turningRight: false,
+            collidedLastFrame: false
+        };
+        const buildings = [];
+        const collectibles = [];
+        const trafficCars = [];
+        // REMOVED: policeCars array
+        const pedestrians = [];
+        const explosions = [];
+        let soundEnabled = false;
+        let initialSpawnSet = false;
+        // REMOVED: policeSpawnTimer, sirenSoundTimer
+
+        // --- Sound Effects (Tone.js) ---
+        let collisionSound, collectSound, explosionSound, pedestrianHitSound, radioSynth; // REMOVED: sirenSound
+        let radioLoop;
+
+        function setupSounds() {
+            // Existing sounds
+            collisionSound = new Tone.NoiseSynth({ noise: { type: 'white' }, envelope: { attack: 0.005, decay: 0.1, sustain: 0 } }).toDestination();
+            collisionSound.volume.value = -12;
+            collectSound = new Tone.Synth({ oscillator: { type: 'sine' }, envelope: { attack: 0.01, decay: 0.2, sustain: 0.1, release: 0.3 } }).toDestination();
+            collectSound.volume.value = -8;
+            explosionSound = new Tone.NoiseSynth({ noise: { type: 'brown' }, envelope: { attack: 0.01, decay: 0.5, sustain: 0.1, release: 0.3 } }).toDestination();
+            explosionSound.volume.value = -5;
+            pedestrianHitSound = new Tone.Synth({ oscillator: { type: 'triangle' }, envelope: { attack: 0.005, decay: 0.05, sustain: 0, release: 0.1 } }).toDestination();
+            pedestrianHitSound.volume.value = -10;
+
+            // REMOVED: Siren sound setup
+
+            // Basic Radio Synth (Looping Melody)
+            radioSynth = new Tone.Synth({
+                oscillator: { type: 'pwm', modulationFrequency: 0.2 },
+                envelope: { attack: 0.02, decay: 0.1, sustain: 0.2, release: 0.9 }
+            }).toDestination();
+            radioSynth.volume.value = -20; // Keep radio quiet
+
+            const radioPattern = ["C4", "E4", "G4", "E4", "A4", "G4", "E4", "D4"];
+            let patternIndex = 0;
+            radioLoop = new Tone.Loop(time => {
+                radioSynth.triggerAttackRelease(radioPattern[patternIndex % radioPattern.length], "8n", time);
+                patternIndex++;
+            }, "4n").start(0); // Loop every quarter note
+
+            // Start Transport for the loop
+            Tone.Transport.start();
+        }
+
+        function playCollisionSound() { if (soundEnabled) try { collisionSound.triggerAttackRelease("0.1"); } catch (e) { console.error("Collision sound error:", e); } }
+        function playCollectSound() { if (soundEnabled) try { collectSound.triggerAttackRelease("C5", "8n"); } catch (e) { console.error("Collect sound error:", e); } }
+        function playExplosionSound() { if (soundEnabled) try { explosionSound.triggerAttackRelease("0.4"); } catch (e) { console.error("Explosion sound error:", e); } }
+        function playPedestrianHitSound() { if (soundEnabled) try { pedestrianHitSound.triggerAttackRelease("A5", "16n"); } catch (e) { console.error("Pedestrian hit sound error:", e); } }
+        // REMOVED: startSirenSound, stopSirenSound
+
+
+        async function startAudioContext() {
+            if (soundEnabled) return;
+            try {
+                await Tone.start(); console.log("Audio context started.");
+                soundEnabled = true; setupSounds(); soundMessage.style.display = 'none';
+            } catch (e) { console.error("Audio context start failed:", e); soundMessage.textContent = "Audio failed."; soundMessage.style.display = 'block'; }
+        }
+
+        // --- Collision Detection (Keep existing functions: checkRectCollision, checkCircleRectCollision) ---
+         function checkRectCollision(rect1, rect2) {
+            // Simple AABB check
+            return rect1.x < rect2.x + rect2.width && rect1.x + rect1.width > rect2.x &&
+                   rect1.y < rect2.y + rect2.height && rect1.y + rect1.height > rect2.y;
+        }
+
+        function checkCircleRectCollision(circle, rect) {
+            // Find the closest point on the AABB to the circle's center
+            let closestX = Math.max(rect.x, Math.min(circle.x, rect.x + rect.width));
+            let closestY = Math.max(rect.y, Math.min(circle.y, rect.y + rect.height));
+            // Calculate distance between circle center and closest point
+            let distanceX = circle.x - closestX; let distanceY = circle.y - closestY;
+            // If distance is less than circle radius, collision occurs
+            return (distanceX * distanceX + distanceY * distanceY) < (circle.radius * circle.radius);
+        }
+
+        // --- Get Rotated Bounding Box (Keep existing) ---
+        function getRotatedBoundingBox(entity) {
+            const cx = entity.x; const cy = entity.y; const angle = entity.angle;
+            const w = entity.width; const h = entity.height;
+            const halfW = w / 2; const halfH = h / 2;
+            // Corners relative to the entity's center (0,0)
+            const corners = [ { x: -halfW, y: -halfH }, { x:  halfW, y: -halfH }, { x:  halfW, y:  halfH }, { x: -halfW, y:  halfH } ];
+            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+            const cosAngle = Math.cos(angle); const sinAngle = Math.sin(angle);
+            corners.forEach(corner => {
+                // Rotate the corner around the center (0,0)
+                const rotatedX = corner.x * cosAngle - corner.y * sinAngle; const rotatedY = corner.x * sinAngle + corner.y * cosAngle;
+                // Translate the rotated corner to world coordinates by adding the entity's center position
+                const worldX = cx + rotatedX; const worldY = cy + rotatedY;
+                // Track the min/max coordinates to find the AABB
+                minX = Math.min(minX, worldX); maxX = Math.max(maxX, worldX); minY = Math.min(minY, worldY); maxY = Math.max(maxY, worldY);
+            });
+            // Return the Axis-Aligned Bounding Box that encloses the rotated rectangle
+            return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+        }
+
+        // --- Get Simple Bounding Box (Keep existing) ---
+        function getBoundingBox(entity) {
+            // Assumes entity has x, y (center), width, height
+            return { x: entity.x - entity.width / 2, y: entity.y - entity.height / 2, width: entity.width, height: entity.height };
+        }
+
+        // --- Object Creation ---
+        function createBuildings() {
+            buildings.length = 0;
+            // Create more buildings, randomly placed but avoiding center spawn
+            const buildingCount = 8;
+            const minSize = Math.min(canvas.width, canvas.height) * 0.08;
+            const maxSize = Math.min(canvas.width, canvas.height) * 0.20;
+            const centerMargin = Math.min(canvas.width, canvas.height) * 0.2; // Area around center to avoid
+
+            for (let i = 0; i < buildingCount; i++) {
+                let validPosition = false;
+                let attempts = 0;
+                let b;
+                while (!validPosition && attempts < 50) {
+                    attempts++;
+                    const w = minSize + Math.random() * (maxSize - minSize);
+                    const h = minSize + Math.random() * (maxSize - minSize);
+                    const x = Math.random() * (canvas.width - w);
+                    const y = Math.random() * (canvas.height - h);
+                    b = { x: x, y: y, width: w, height: h, color: buildingColors[i % buildingColors.length] };
+
+                    // Check overlap with center spawn area
+                    const centerRect = {
+                        x: canvas.width / 2 - centerMargin, y: canvas.height / 2 - centerMargin,
+                        width: centerMargin * 2, height: centerMargin * 2
+                    };
+                    if (checkRectCollision(b, centerRect)) continue;
+
+                    // Check overlap with existing buildings
+                    validPosition = true;
+                    for (const existing of buildings) {
+                        if (checkRectCollision(b, existing)) {
+                            validPosition = false;
+                            break;
+                        }
+                    }
+                }
+                if (validPosition) {
+                    buildings.push(b);
+                } else {
+                    console.warn("Could not place building after attempts.");
+                }
+            }
+        }
+
+        // Keep spawnCollectible, createCollectibles (minor position check updates if needed)
+        function spawnCollectible() {
+            let validPosition = false; let x, y;
+            const maxAttempts = 50; let attempts = 0;
+            while (!validPosition && attempts < maxAttempts) {
+                attempts++;
+                x = Math.random() * (canvas.width - collectibleRadius * 2 - 20) + collectibleRadius + 10;
+                y = Math.random() * (canvas.height - collectibleRadius * 2 - 20) + collectibleRadius + 10;
+                validPosition = true;
+                const collectibleRect = {x: x - collectibleRadius, y: y - collectibleRadius, width: collectibleRadius*2, height: collectibleRadius*2};
+                // Check collision with various entities
+                for (const building of buildings) { if (checkRectCollision(collectibleRect, building)) { validPosition = false; break; } }
+                if (validPosition) { for (const existing of collectibles) { if (!existing.active) continue; const dx = x - existing.x; const dy = y - existing.y; if (Math.sqrt(dx * dx + dy * dy) < collectibleRadius * 3) { validPosition = false; break; } } }
+                const spawnArea = {x: canvas.width/2 - car.width * 3, y: canvas.height/2 - car.height * 3, width: car.width * 6, height: car.height * 6}; // Larger spawn area check
+                if (validPosition && checkRectCollision(collectibleRect, spawnArea)) { validPosition = false; }
+                if (validPosition) { for (const tCar of trafficCars) { const trafficRect = getBoundingBox(tCar); if (checkRectCollision(collectibleRect, trafficRect)) { validPosition = false; break; } } }
+                // REMOVED: Check collision with police cars
+                if (validPosition) { for (const ped of pedestrians) { const pedRect = getBoundingBox(ped); if (checkRectCollision(collectibleRect, pedRect)) { validPosition = false; break; } } }
+            }
+            if (validPosition) { return { x, y, radius: collectibleRadius, active: true }; }
+            else { console.warn("Could not find valid position for collectible."); return null; }
+        }
+
+        function createCollectibles() {
+            collectibles.length = 0;
+            for (let i = 0; i < numCollectibles; i++) {
+                const newCollectible = spawnCollectible();
+                if (newCollectible) collectibles.push(newCollectible);
+            }
+        }
+
+        // Keep spawnTrafficCar, createTraffic (use new colors)
+        function spawnTrafficCar() {
+            const trafficW = carWidth * (0.8 + Math.random() * 0.4);
+            const trafficH = carHeight * (0.8 + Math.random() * 0.4);
+            let startX, startY, velX, velY;
+            const speed = trafficCarSpeedMin + Math.random() * (trafficCarSpeedMax - trafficCarSpeedMin);
+            let angle;
+            if (Math.random() < 0.5) { // Horizontal
+                angle = Math.random() < 0.5 ? 0 : Math.PI; // 0 or 180 degrees
+                velX = Math.cos(angle) * speed; velY = 0;
+                startY = Math.random() * canvas.height; startX = velX > 0 ? -trafficW : canvas.width + trafficW;
+            } else { // Vertical
+                angle = Math.random() < 0.5 ? Math.PI / 2 : -Math.PI / 2; // 90 or -90 degrees
+                velX = 0; velY = Math.sin(angle) * speed;
+                startX = Math.random() * canvas.width; startY = velY > 0 ? -trafficH : canvas.height + trafficH;
+            }
+            const tempRect = { x: startX - trafficW/2, y: startY - trafficH/2, width: trafficW, height: trafficH };
+            for(const building of buildings) { if (checkRectCollision(tempRect, building)) return null; }
+            // Assign a random color
+            const color = trafficCarColors[Math.floor(Math.random() * trafficCarColors.length)];
+            return { x: startX, y: startY, width: trafficW, height: trafficH, vx: velX, vy: velY, angle: angle, color: color }; // Store angle
+        }
+
+        function createTraffic() {
+            // Ensure we reach the target number of traffic cars
+            while (trafficCars.length < numTrafficCars) {
+                const newTraffic = spawnTrafficCar();
+                if (newTraffic) {
+                    trafficCars.push(newTraffic);
+                }
+            }
+             // Clear old explosions when resetting traffic (e.g., on resize)
+             explosions.length = 0;
+        }
+
+        // Keep spawnPedestrian, createPedestrians (use new colors/size)
+        function spawnPedestrian() {
+            const pedW = pedestrianWidth; const pedH = pedestrianHeight;
+            let startX, startY; let validPosition = false;
+            const maxAttempts = 30; let attempts = 0;
+            while(!validPosition && attempts < maxAttempts) {
+                attempts++;
+                startX = Math.random() * (canvas.width - pedW) + pedW / 2;
+                startY = Math.random() * (canvas.height - pedH) + pedH / 2;
+                validPosition = true;
+                const tempRect = { x: startX - pedW/2, y: startY - pedH/2, width: pedW, height: pedH };
+                for(const building of buildings) { if (checkRectCollision(tempRect, building)) { validPosition = false; break; } }
+                const spawnArea = {x: canvas.width/2 - car.width * 3, y: canvas.height/2 - car.height * 3, width: car.width * 6, height: car.height * 6};
+                if (validPosition && checkRectCollision(tempRect, spawnArea)) { validPosition = false; }
+            }
+            if (!validPosition) { console.warn("Could not find valid position for pedestrian."); return null; }
+            const angle = Math.random() * Math.PI * 2;
+            const speed = pedestrianSpeedMin + Math.random() * (pedestrianSpeedMax - pedestrianSpeedMin);
+            const velX = Math.cos(angle) * speed; const velY = Math.sin(angle) * speed;
+            return { x: startX, y: startY, width: pedW, height: pedH, vx: velX, vy: velY, color: pedestrianColor };
+        }
+
+        function createPedestrians() {
+             // Ensure we reach the target number of pedestrians
+             while (pedestrians.length < numPedestrians) {
+                 const newPed = spawnPedestrian();
+                 if (newPed) pedestrians.push(newPed);
+             }
+        }
+
+        // REMOVED: spawnPoliceCar function
+
+        // --- Canvas Sizing ---
+        function resizeCanvas() {
+            const container = document.querySelector('body'); // Use body or a specific container
+            const availableWidth = container.clientWidth * 0.9;
+            const availableHeight = container.clientHeight * 0.8; // Leave more space vertically
+
+            // Maintain an aspect ratio (e.g., 4:3 or 16:9)
+            const aspectRatio = 4 / 3;
+            let newWidth = Math.min(availableWidth, 800); // Max width
+            let newHeight = newWidth / aspectRatio;
+
+            // If height is constrained more than width
+            if (newHeight > availableHeight) {
+                newHeight = Math.min(availableHeight, 600); // Max height
+                newWidth = newHeight * aspectRatio;
+            }
+
+            canvas.width = newWidth;
+            canvas.height = newHeight;
+
+            // Adjust container width for centering etc.
+            document.querySelector('.game-container').style.width = `${canvas.width}px`;
+            document.querySelector('.game-title').style.maxWidth = `${canvas.width}px`;
+            document.querySelector('.instructions').style.maxWidth = `${canvas.width}px`;
+
+            // Adjust minimap size relative to canvas
+            minimapContainer.style.width = `${canvas.width * 0.15}px`;
+            minimapContainer.style.height = `${canvas.height * 0.15}px`;
+
+
+            if (!initialSpawnSet) {
+                car.x = canvas.width / 2; car.y = canvas.height / 2;
+                initialSpawnSet = true;
+            } else {
+                 // Keep car within new bounds
+                 car.x = Math.max(car.width / 2, Math.min(canvas.width - car.width / 2, car.x));
+                 car.y = Math.max(car.height / 2, Math.min(canvas.height - car.height / 2, car.y));
+            }
+
+            // Recreate elements in order
+            createBuildings();
+            trafficCars.length = 0;
+            // REMOVED: policeCars.length = 0;
+            pedestrians.length = 0;
+            createTraffic();
+            createPedestrians();
+            createCollectibles(); // Create collectibles last
+        }
+
+        // --- Drawing Functions ---
+        function drawCar(entity) { // REMOVED: isPolice parameter
+            ctx.save();
+            ctx.translate(entity.x, entity.y);
+            ctx.rotate(entity.angle + Math.PI / 2); // Visual rotation offset
+            ctx.fillStyle = entity.color;
+            ctx.fillRect(-entity.width / 2, -entity.height / 2, entity.width, entity.height);
+
+            // Windshield
+            ctx.fillStyle = '#607d8b'; // Darker blue-grey windshield
+            ctx.fillRect(-entity.width * 0.4, -entity.height / 2 + entity.height * 0.1, entity.width * 0.8, entity.height * 0.25);
+
+            // Headlights
+            ctx.fillStyle = '#ffeb3b'; // Yellowish headlights
+            const headlightSize = 4;
+            ctx.fillRect(-entity.width / 2 + 2, -entity.height / 2 + 3, headlightSize, headlightSize);
+            ctx.fillRect( entity.width / 2 - headlightSize - 2, -entity.height / 2 + 3, headlightSize, headlightSize);
+
+            // REMOVED: Police Siren Light drawing logic
+
+            ctx.restore();
+        }
+
+        function drawBuildings() {
+            buildings.forEach(b => {
+                ctx.fillStyle = b.color;
+                ctx.fillRect(b.x, b.y, b.width, b.height);
+                // Add a subtle border/shadow for depth
+                ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+                ctx.lineWidth = 1;
+                ctx.strokeRect(b.x, b.y, b.width, b.height);
+            });
+        }
+
+        function drawCollectibles() {
+            ctx.fillStyle = collectibleColor;
+            collectibles.forEach(c => {
+                if (c.active) { ctx.beginPath(); ctx.arc(c.x, c.y, c.radius, 0, Math.PI * 2); ctx.fill(); }
+            });
+        }
+
+        function drawTrafficCars() {
+            trafficCars.forEach(tCar => {
+                // Draw traffic cars rotated
+                 ctx.save();
+                 ctx.translate(tCar.x, tCar.y);
+                 ctx.rotate(tCar.angle + Math.PI / 2); // Use stored angle
+                 ctx.fillStyle = tCar.color;
+                 ctx.fillRect(-tCar.width / 2, -tCar.height / 2, tCar.width, tCar.height);
+                  // Simple windshield
+                 ctx.fillStyle = '#9e9e9e';
+                 ctx.fillRect(-tCar.width * 0.35, -tCar.height / 2 + tCar.height * 0.1, tCar.width * 0.7, tCar.height * 0.2);
+                 ctx.restore();
+            });
+        }
+
+        function drawPedestrians() {
+            pedestrians.forEach(ped => {
+                ctx.fillStyle = ped.color;
+                ctx.fillRect(ped.x - ped.width / 2, ped.y - ped.height / 2, ped.width, ped.height);
+            });
+        }
+
+        function drawExplosions() {
+             explosions.forEach(exp => {
+                 const progress = (explosionDuration - exp.duration) / explosionDuration;
+                 const currentRadius = exp.maxRadius * progress;
+                 const alpha = 1 - progress;
+                 // Orange
+                 ctx.fillStyle = `rgba(255, 165, 0, ${alpha * 0.8})`;
+                 ctx.beginPath(); ctx.arc(exp.x, exp.y, currentRadius, 0, Math.PI * 2); ctx.fill();
+                 // Red-Orange
+                 ctx.fillStyle = `rgba(255, 69, 0, ${alpha * 0.6})`;
+                 ctx.beginPath(); ctx.arc(exp.x, exp.y, currentRadius * 0.6, 0, Math.PI * 2); ctx.fill();
+                  // Yellow center
+                 ctx.fillStyle = `rgba(255, 255, 0, ${alpha * 0.5})`;
+                 ctx.beginPath(); ctx.arc(exp.x, exp.y, currentRadius * 0.3, 0, Math.PI * 2); ctx.fill();
+             });
+         }
+
+        function drawBackground() {
+            // Asphalt base
+            ctx.fillStyle = '#4a4a4a';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Simple road lines
+            ctx.strokeStyle = '#757575'; // Grey lines
+            ctx.lineWidth = 2;
+            const lineSpacing = 80;
+            // Vertical lines
+            for (let x = lineSpacing; x < canvas.width; x += lineSpacing) {
+                ctx.beginPath();
+                ctx.setLineDash([15, 15]); // Dashed lines
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, canvas.height);
+                ctx.stroke();
+            }
+            // Horizontal lines
+             for (let y = lineSpacing; y < canvas.height; y += lineSpacing) {
+                ctx.beginPath();
+                ctx.setLineDash([15, 15]); // Dashed lines
+                ctx.moveTo(0, y);
+                ctx.lineTo(canvas.width, y);
+                ctx.stroke();
+            }
+            ctx.setLineDash([]); // Reset line dash
+        }
+
+        // --- UI Update Functions ---
+        function updateScoreDisplay() {
+            scoreElement.textContent = `Score: ${score}`;
+        }
+
+        function updateWantedLevelDisplay() {
+            let stars = '';
+            for (let i = 0; i < maxWantedLevel; i++) {
+                stars += (i < wantedLevel) ? wantedStar : '☆'; // Filled star or empty star outline
+            }
+            wantedLevelElement.innerHTML = stars; // Use innerHTML to render star characters correctly
+
+            // REMOVED: Start/Stop Siren Sound logic
+        }
+
+        function updateMinimap() {
+            const mapWidth = minimapContainer.offsetWidth;
+            const mapHeight = minimapContainer.offsetHeight;
+
+            // Calculate player position relative to map size
+            const playerMapX = (car.x / canvas.width) * mapWidth;
+            const playerMapY = (car.y / canvas.height) * mapHeight;
+
+            minimapPlayer.style.left = `${playerMapX}px`;
+            minimapPlayer.style.top = `${playerMapY}px`;
+
+            // REMOVED: Logic for drawing police dots
+        }
+
+
+        // --- Update Game State ---
+        function update() {
+            // --- Update Player Car ---
+            // Rotation & Movement
+            if (car.turningLeft) car.angle -= carTurnRate;
+            if (car.turningRight) car.angle += carTurnRate;
+            // Normalize angle to be between 0 and 2*PI
+            car.angle = (car.angle + Math.PI * 2) % (Math.PI * 2);
+
+            let currentSpeed = 0;
+            if (car.accelerating) currentSpeed = carMoveSpeed;
+            else if (car.braking) currentSpeed = -carReverseSpeed;
+
+            const deltaX = Math.cos(car.angle) * currentSpeed;
+            const deltaY = Math.sin(car.angle) * currentSpeed;
+            let nextX = car.x + deltaX;
+            let nextY = car.y + deltaY;
+
+            // Player Collision Detection
+            const potentialCarState = { ...car, x: nextX, y: nextY, angle: car.angle };
+            const nextCarAABB = getRotatedBoundingBox(potentialCarState);
+            let collisionDetected = false;
+            let hitTraffic = false;
+            let hitPedestrian = false;
+            // REMOVED: hitPolice variable
+
+            // 1. Boundary Collision
+            if (nextCarAABB.x < 0 || nextCarAABB.x + nextCarAABB.width > canvas.width ||
+                nextCarAABB.y < 0 || nextCarAABB.y + nextCarAABB.height > canvas.height) {
+                collisionDetected = true; nextX = car.x; nextY = car.y;
+            }
+            // 2. Building Collision
+            if (!collisionDetected) {
+                for (const building of buildings) {
+                    if (checkRectCollision(nextCarAABB, building)) {
+                        collisionDetected = true; nextX = car.x; nextY = car.y; break;
+                    }
+                }
+            }
+             // 3. Traffic Car Collision
+            if (!collisionDetected) {
+                for (let i = trafficCars.length - 1; i >= 0; i--) {
+                    const tCar = trafficCars[i];
+                    const trafficCarAABB = getBoundingBox(tCar);
+                    if (checkRectCollision(nextCarAABB, trafficCarAABB)) {
+                        collisionDetected = true; hitTraffic = true; nextX = car.x; nextY = car.y;
+                        // Create explosion, remove car, play sound
+                        explosions.push({ x: tCar.x, y: tCar.y, duration: explosionDuration, maxRadius: Math.max(tCar.width, tCar.height) * 1.5 });
+                        trafficCars.splice(i, 1); playExplosionSound();
+                        // Increase wanted level
+                        wantedLevel = Math.min(maxWantedLevel, wantedLevel + wantedLevelIncreaseCar);
+                        // REMOVED: policeSpawnTimer reset
+                        updateWantedLevelDisplay();
+                        // Spawn a new traffic car to replace the destroyed one
+                        const newTraffic = spawnTrafficCar(); if (newTraffic) trafficCars.push(newTraffic);
+                        break; // Only collide with one car per frame
+                    }
+                }
+            }
+            // 4. Pedestrian Collision
+            if (!collisionDetected) {
+                for (let i = pedestrians.length - 1; i >= 0; i--) {
+                    const ped = pedestrians[i]; const pedAABB = getBoundingBox(ped);
+                    if (checkRectCollision(nextCarAABB, pedAABB)) {
+                        collisionDetected = true; hitPedestrian = true; nextX = car.x; nextY = car.y;
+                        // Play sound, remove pedestrian
+                        playPedestrianHitSound(); pedestrians.splice(i, 1);
+                        // Increase wanted level
+                        wantedLevel = Math.min(maxWantedLevel, wantedLevel + wantedLevelIncreasePed);
+                        // REMOVED: policeSpawnTimer reset
+                        updateWantedLevelDisplay();
+                        // Spawn a new pedestrian
+                        const newPed = spawnPedestrian(); if (newPed) pedestrians.push(newPed);
+                        break; // Only collide with one pedestrian per frame
+                    }
+                }
+            }
+             // REMOVED: Police Car Collision section
+
+            // Play Building/Boundary Collision Sound
+            if (collisionDetected && !hitTraffic && !hitPedestrian && !car.collidedLastFrame) { // REMOVED: !hitPolice check
+                playCollisionSound();
+            }
+            // Update collision state for next frame (for building/boundary sound)
+            car.collidedLastFrame = collisionDetected && !hitTraffic && !hitPedestrian; // REMOVED: !hitPolice check
+
+
+            // Update player car position
+            car.x = nextX;
+            car.y = nextY;
+
+            // --- Update Traffic Cars ---
+            trafficCars.forEach(tCar => {
+                tCar.x += tCar.vx; tCar.y += tCar.vy;
+                // Wrapping logic
+                if (tCar.vx > 0 && tCar.x - tCar.width / 2 > canvas.width) { tCar.x = -tCar.width / 2; tCar.y = Math.random() * canvas.height; }
+                else if (tCar.vx < 0 && tCar.x + tCar.width / 2 < 0) { tCar.x = canvas.width + tCar.width / 2; tCar.y = Math.random() * canvas.height; }
+                else if (tCar.vy > 0 && tCar.y - tCar.height / 2 > canvas.height) { tCar.y = -tCar.height / 2; tCar.x = Math.random() * canvas.width; }
+                else if (tCar.vy < 0 && tCar.y + tCar.height / 2 < 0) { tCar.y = canvas.height + tCar.height / 2; tCar.x = Math.random() * canvas.width; }
+            });
+
+            // --- Update Pedestrians --- (Same logic as before)
+             pedestrians.forEach(ped => {
+                 // Wandering logic
+                 if (Math.random() < pedestrianTurnChance) {
+                     const angle = Math.random() * Math.PI * 2; const speed = pedestrianSpeedMin + Math.random() * (pedestrianSpeedMax - pedestrianSpeedMin);
+                     ped.vx = Math.cos(angle) * speed; ped.vy = Math.sin(angle) * speed;
+                 }
+                 // Movement & Collision (Boundaries, Buildings)
+                 let nextPedX = ped.x + ped.vx; let nextPedY = ped.y + ped.vy;
+                 const pedAABB = { x: nextPedX - ped.width / 2, y: nextPedY - ped.height / 2, width: ped.width, height: ped.height };
+                 let pedCollision = false;
+                 // Boundary collision
+                 if (pedAABB.x < 0 || pedAABB.x + pedAABB.width > canvas.width) { ped.vx *= -1; nextPedX = ped.x; pedCollision = true; }
+                 if (pedAABB.y < 0 || pedAABB.y + pedAABB.height > canvas.height) { ped.vy *= -1; nextPedY = ped.y; pedCollision = true; }
+
+                 // Building collision
+                 const nextPedAABB = { x: nextPedX - ped.width / 2, y: nextPedY - ped.height / 2, width: ped.width, height: ped.height };
+                 if (!pedCollision) {
+                    for (const building of buildings) {
+                         if (checkRectCollision(nextPedAABB, building)) {
+                             const currentPedAABB = getBoundingBox(ped);
+                             // Basic reflection logic: reverse velocity component perpendicular to the collision surface
+                             if ( (currentPedAABB.x + currentPedAABB.width <= building.x && nextPedAABB.x + nextPedAABB.width > building.x) || // Hit left side
+                                  (currentPedAABB.x >= building.x + building.width && nextPedAABB.x < building.x + building.width) ) { // Hit right side
+                                 ped.vx *= -1;
+                             } else { // Hit top or bottom side
+                                 ped.vy *= -1;
+                             }
+                             nextPedX = ped.x; nextPedY = ped.y; // Prevent sticking
+                             break;
+                         }
+                     }
+                 }
+                 ped.x = nextPedX; ped.y = nextPedY;
+             });
+
+            // REMOVED: Update Police Cars section
+
+            // --- Update Explosions ---
+            for (let i = explosions.length - 1; i >= 0; i--) {
+                explosions[i].duration--;
+                if (explosions[i].duration <= 0) { explosions.splice(i, 1); }
+            }
+
+
+            // --- Update Collectibles ---
+            const currentCarAABB = getRotatedBoundingBox(car);
+            collectibles.forEach((c) => {
+                if (c.active) {
+                    const collectibleCircle = { x: c.x, y: c.y, radius: c.radius };
+                    if (checkCircleRectCollision(collectibleCircle, currentCarAABB)) {
+                        c.active = false; score += 10; updateScoreDisplay(); playCollectSound();
+                    }
+                }
+            });
+
+            // Respawn collectibles
+            const activeCollectibles = collectibles.filter(c => c.active).length;
+            if (activeCollectibles === 0 && collectibles.length > 0) { createCollectibles(); }
+
+            // --- Update UI ---
+             updateMinimap();
+        }
+
+        // --- Game Loop ---
+        function gameLoop() {
+            // Check if sound needs initialization prompt
+            if (!soundEnabled && Tone.context.state !== 'running') { soundMessage.style.display = 'block'; }
+            else { soundMessage.style.display = 'none'; }
+
+            update(); // Update game state
+
+            // Drawing order
+            ctx.clearRect(0, 0, canvas.width, canvas.height); // Clear canvas
+            drawBackground();
+            drawBuildings();
+            drawTrafficCars();
+            drawPedestrians();
+            // REMOVED: policeCars drawing loop
+            drawExplosions();
+            drawCollectibles();
+            drawCar(car); // Draw player car last (on top)
+
+            requestAnimationFrame(gameLoop); // Request next frame
+        }
+
+        // --- Event Listeners --- (Keep existing keydown/keyup and button listeners)
+        function handleKeyDown(e) {
+            startAudioContext(); // Ensure audio starts on interaction
+            // Prevent default scrolling behavior for arrow keys
+            if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) e.preventDefault();
+            // Handle key presses for car control
+            switch (e.key) {
+                case 'ArrowUp': case 'w': car.accelerating = true; break;
+                case 'ArrowDown': case 's': car.braking = true; break;
+                case 'ArrowLeft': case 'a': car.turningLeft = true; break;
+                case 'ArrowRight': case 'd': car.turningRight = true; break;
+            }
+        }
+        function handleKeyUp(e) {
+            // Handle key releases for car control
+            switch (e.key) {
+                case 'ArrowUp': case 'w': car.accelerating = false; break;
+                case 'ArrowDown': case 's': car.braking = false; break;
+                case 'ArrowLeft': case 'a': car.turningLeft = false; break;
+                case 'ArrowRight': case 'd': car.turningRight = false; break;
+            }
+        }
+
+        // Button controls setup
+        const btnUp = document.getElementById('btnUp'); const btnDown = document.getElementById('btnDown');
+        const btnLeft = document.getElementById('btnLeft'); const btnRight = document.getElementById('btnRight');
+        function setupButtonListeners(button, flagSetter) {
+            const startSoundAndSetFlag = (val) => { startAudioContext(); flagSetter(val); };
+            // Mouse events
+            button.addEventListener('mousedown', (e) => { e.preventDefault(); startSoundAndSetFlag(true); });
+            button.addEventListener('mouseup', (e) => { e.preventDefault(); startSoundAndSetFlag(false); });
+            button.addEventListener('mouseleave', (e) => { flagSetter(false); }); // Stop if mouse leaves button while pressed
+            // Touch events
+            button.addEventListener('touchstart', (e) => { e.preventDefault(); startSoundAndSetFlag(true); });
+            button.addEventListener('touchend', (e) => { e.preventDefault(); startSoundAndSetFlag(false); });
+        }
+        setupButtonListeners(btnUp, (val) => car.accelerating = val); setupButtonListeners(btnDown, (val) => car.braking = val);
+        setupButtonListeners(btnLeft, (val) => car.turningLeft = val); setupButtonListeners(btnRight, (val) => car.turningRight = val);
+
+
+        // --- Initialization ---
+        window.addEventListener('keydown', handleKeyDown); window.addEventListener('keyup', handleKeyUp);
+        window.addEventListener('resize', resizeCanvas);
+        // Use the container for initial sound start click/touch (run only once)
+        document.querySelector('.game-container').addEventListener('click', startAudioContext, { once: true });
+        document.querySelector('.game-container').addEventListener('touchstart', startAudioContext, { once: true });
+
+
+        // --- Start Game ---
+        window.onload = () => {
+            resizeCanvas(); // Set initial canvas size and create objects
+            updateScoreDisplay(); // Initialize score display
+            updateWantedLevelDisplay(); // Initialize wanted level display
+            gameLoop(); // Start the main game loop
+        };
+
+    </script>
+
+</body>
+</html>
